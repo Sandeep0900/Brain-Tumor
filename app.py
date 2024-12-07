@@ -43,27 +43,25 @@ def main():
     model_path = 'models/keras_model.h5'
     
     # Load model
-    st.write("Attempting to load the model...")
     model = load_model_with_custom_objects(model_path)
     
     if model is None:
         st.error("Could not load the model. Diagnosis needed.")
         return
     
-    # Model summary
-    st.write("Model Summary:")
-    model.summary(print_fn=st.write)
+    # # Model summary
+    # st.write("Model Summary:")
+    # model.summary(print_fn=st.write)
     
-    # Model architecture details
-    st.write("\nModel Configuration:")
-    try:
-        config = model.get_config()
-        st.write(config)
-    except Exception as e:
-        st.error(f"Could not retrieve model configuration: {e}")
+    # # Model architecture details
+    # st.write("\nModel Configuration:")
+    # try:
+    #     config = model.get_config()
+    #     st.write(config)
+    # except Exception as e:
+    #     st.error(f"Could not retrieve model configuration: {e}")
     
     # Image upload for testing
-    st.write("\nTest Model Prediction")
     uploaded_file = st.file_uploader("Upload a test image", type=['jpg', 'png', 'jpeg'])
     
     if uploaded_file is not None:
