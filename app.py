@@ -10,12 +10,12 @@ def load_model_with_custom_objects(model_path):
         if 'groups' in kwargs:
             del kwargs['groups']
         return tf.keras.layers.DepthwiseConv2D(*args, **kwargs)
-
+    
     custom_objects = {
         'DepthwiseConv2D': custom_depthwise_conv2d,
         'tf': tf
     }
-
+    
     try:
         # Attempt to load with custom objects
         model = tf.keras.models.load_model(
