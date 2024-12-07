@@ -2,6 +2,7 @@ import streamlit as st
 import tensorflow as tf
 import numpy as np
 from PIL import Image
+from tensorflow.keras.models import load_model
 import os
 
 # Class labels
@@ -17,11 +18,25 @@ TUMOR_DESCRIPTIONS = {
 
 def load_model():
     try:
+        # Try standard loading
         model = tf.keras.models.load_model('models/keras_model.h5')
         return model
     except Exception as e:
-        st.error(f"Error loading model: {e}")
-        return None
+        st.error(f"Standard model loading failed: {e}")
+        
+        try:
+            # Try loading with custom objects
+            model = tf.keras.models.load_model(
+                'models/keras_model.h5', 
+                custom_objects={
+                    'DepthwiseConv2D': tf.keras.layers.DepthwiseConv2D
+                }
+            )
+            return model
+        except Exception as detailed_error:
+            st.error(f"Advanced model loading failed: {detailed_error}")
+            st.warning("Please check your model's compatibility with current TensorFlow version.")
+            return None
 
 def predict_tumor(model, image):
     try:
