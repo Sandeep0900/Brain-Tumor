@@ -1,13 +1,8 @@
-from flask import Flask, render_template, request, redirect, url_for
+import streamlit as st
 import tensorflow as tf
 import numpy as np
 from PIL import Image
-
-# Initialize Flask app
-app = Flask(__name__)
-
-# Load the model
-model = tf.keras.models.load_model('models/keras_model.h5')
+import os
 
 # Class labels
 CLASS_LABELS = ["Pituitary", "No Tumor", "Meningioma", "Glioma"]
@@ -20,55 +15,93 @@ TUMOR_DESCRIPTIONS = {
     "Glioma": "A type of tumor that occurs in the brain and spinal cord."
 }
 
-@app.route("/", methods=["GET", "POST"])
-def index():
-    uploaded_image_url = None
-    if request.method == "POST":
-        # Check if the file is uploaded
-        if 'image' not in request.files:
-            return render_template("index.html", result="No file uploaded.", description="Please upload an image.")
+def load_model():
+    try:
+        model = tf.keras.models.load_model('models/keras_model.h5')
+        return model
+    except Exception as e:
+        st.error(f"Error loading model: {e}")
+        return None
 
-        file = request.files['image']
-        if file.filename == '':
-            return render_template("index.html", result="No file selected.", description="Please upload an image.")
+def predict_tumor(model, image):
+    try:
+        # Process the image
+        image = image.convert("RGB")  # Ensure image is in RGB format
+        image = image.resize((224, 224))  # Resize to match model input
+        image_array = np.array(image) / 255.0  # Normalize pixel values
+        image_array = np.expand_dims(image_array, axis=0)  # Add batch dimension
 
-        try:
-            # Save and display the uploaded image
-            file_path = f"static/uploads/{file.filename}"
-            file.save(file_path)
-            uploaded_image_url = url_for('static', filename=f"uploads/{file.filename}")
+        # Predict
+        predictions = model.predict(image_array)[0]  # Get prediction probabilities
+        predicted_class_index = np.argmax(predictions)
+        predicted_class = CLASS_LABELS[predicted_class_index]
 
-            # Process the image
-            image = Image.open(file).convert("RGB")  # Ensure image is in RGB format
-            image = image.resize((224, 224))  # Resize to match model input
-            image_array = np.array(image) / 255.0  # Normalize pixel values
-            image_array = np.expand_dims(image_array, axis=0)  # Add batch dimension
+        # Calculate prediction percentages
+        prediction_percentages = [
+            {"class": CLASS_LABELS[i], "percentage": round(prob * 100, 2)}
+            for i, prob in enumerate(predictions)
+        ]
 
-            # Predict
-            predictions = model.predict(image_array)[0]  # Get prediction probabilities
-            predicted_class_index = np.argmax(predictions)
-            predicted_class = CLASS_LABELS[predicted_class_index]
+        return predicted_class, prediction_percentages
+    except Exception as e:
+        st.error(f"Error in prediction: {e}")
+        return None, None
 
-            # Calculate prediction percentages
-            prediction_percentages = [
-                {"class": CLASS_LABELS[i], "percentage": round(prob * 100, 2)}
-                for i, prob in enumerate(predictions)
-            ]
+def main():
+    # Set page title and favicon
+    st.set_page_config(page_title="Brain Tumor Detection", page_icon=":medical_symbol:")
 
-            # Pass result to template
-            return render_template(
-                "index.html",
-                result=predicted_class,
-                description=TUMOR_DESCRIPTIONS[predicted_class],
-                prediction_percentages=prediction_percentages,
-                uploaded_image_url=uploaded_image_url
-            )
+    # Title
+    st.title("🧠 Brain Tumor Detection")
+    st.write("Upload a brain MRI image for tumor classification")
 
-        except Exception as e:
-            return render_template("index.html", result="Error processing image.", description=str(e))
+    # Load the model
+    model = load_model()
+    if model is None:
+        st.stop()
 
-    # Default landing page
-    return render_template("index.html", result=None, description=None)
+    # File uploader
+    uploaded_file = st.file_uploader(
+        "Choose a brain MRI image...", 
+        type=["jpg", "jpeg", "png"],
+        help="Upload a medical MRI scan image"
+    )
 
+    # Display upload and prediction section
+    if uploaded_file is not None:
+        # Display the uploaded image
+        image = Image.open(uploaded_file)
+        st.image(image, caption="Uploaded MRI Image", use_column_width=True)
+
+        # Prediction button
+        if st.button("Detect Tumor"):
+            with st.spinner('Analyzing image...'):
+                # Perform prediction
+                predicted_class, prediction_percentages = predict_tumor(model, image)
+
+                if predicted_class:
+                    # Display results
+                    st.success(f"Detected Tumor Type: {predicted_class}")
+                    
+                    # Description
+                    st.info(f"Description: {TUMOR_DESCRIPTIONS[predicted_class]}")
+                    
+                    # Prediction Percentages
+                    st.subheader("Prediction Breakdown")
+                    for pred in prediction_percentages:
+                        st.progress(
+                            pred['percentage'] / 100, 
+                            text=f"{pred['class']}: {pred['percentage']}%"
+                        )
+
+    # Sidebar information
+    st.sidebar.header("About the App")
+    st.sidebar.info(
+        "This app uses a deep learning model to classify brain tumors "
+        "from MRI images into four categories: Pituitary, No Tumor, "
+        "Meningioma, and Glioma."
+    )
+
+# Run the app
 if __name__ == "__main__":
-    app.run(debug=True)
+    main()
