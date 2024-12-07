@@ -1,4 +1,5 @@
 Flask
+streamlit
 tensorflow
 pillow
 numpy
