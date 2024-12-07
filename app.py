@@ -1,47 +1,35 @@
 import tensorflow as tf
-from tensorflow.keras.models import load_model
 import streamlit as st
 import numpy as np
-from tensorflow.keras.layers import DepthwiseConv2D
+from PIL import Image
+import io
 
-def custom_load_model(model_path):
+def load_model_with_custom_objects(model_path):
+    def custom_depthwise_conv2d(*args, **kwargs):
+        # Remove 'groups' argument if present
+        if 'groups' in kwargs:
+            del kwargs['groups']
+        return tf.keras.layers.DepthwiseConv2D(*args, **kwargs)
+
+    custom_objects = {
+        'DepthwiseConv2D': custom_depthwise_conv2d,
+        'tf': tf
+    }
+
     try:
-        # Custom objects dictionary to handle potential compatibility issues
-        custom_objects = {
-            'DepthwiseConv2D': tf.keras.layers.DepthwiseConv2D,
-            'tf': tf
-        }
-        
         # Attempt to load with custom objects
-        model = load_model(model_path, custom_objects=custom_objects)
+        model = tf.keras.models.load_model(
+            model_path, 
+            custom_objects=custom_objects,
+            compile=False
+        )
         return model
-    
     except Exception as e:
-        st.error(f"Model loading failed: {e}")
-        
-        # Attempt to recreate the model if loading fails
-        try:
-            # Load the model weights
-            original_model = load_model(model_path, compile=False)
-            
-            # Create a new model with similar architecture
-            new_model = tf.keras.Sequential([
-                tf.keras.layers.Input(shape=(224, 224, 3)),
-                # Recreate the model layers here
-                # You'll need to manually add layers based on your original model architecture
-            ])
-            
-            # Copy weights
-            new_model.set_weights(original_model.get_weights())
-            
-            return new_model
-        
-        except Exception as reconstruction_error:
-            st.error(f"Model reconstruction failed: {reconstruction_error}")
-            return None
+        st.error(f"Advanced loading failed: {e}")
+        return None
 
 def preprocess_image(image):
-    # Standardized image preprocessing
+    # Resize and normalize image
     image = image.convert("RGB")
     image = image.resize((224, 224))
     image_array = np.array(image) / 255.0
@@ -51,37 +39,55 @@ def preprocess_image(image):
 def main():
     st.title("Brain Tumor Detection Model Diagnostic")
     
-    # Model loading
+    # Model path
+    model_path = 'models/keras_model.h5'
+    
+    # Load model
     st.write("Attempting to load the model...")
-    model = custom_load_model('models/keras_model.h5')
+    model = load_model_with_custom_objects(model_path)
     
     if model is None:
-        st.error("Could not load the model. Please check the model file.")
+        st.error("Could not load the model. Diagnosis needed.")
         return
     
     # Model summary
     st.write("Model Summary:")
     model.summary(print_fn=st.write)
     
-    # Test prediction capability
-    st.write("\nTesting Model Prediction Capability:")
-    test_image_path = st.file_uploader("Upload a test image", type=['jpg', 'png', 'jpeg'])
+    # Model architecture details
+    st.write("\nModel Configuration:")
+    try:
+        config = model.get_config()
+        st.write(config)
+    except Exception as e:
+        st.error(f"Could not retrieve model configuration: {e}")
     
-    if test_image_path is not None:
-        from PIL import Image
-        
+    # Image upload for testing
+    st.write("\nTest Model Prediction")
+    uploaded_file = st.file_uploader("Upload a test image", type=['jpg', 'png', 'jpeg'])
+    
+    if uploaded_file is not None:
         # Open and display the image
-        image = Image.open(test_image_path)
+        image = Image.open(uploaded_file)
         st.image(image, caption="Uploaded Image", use_column_width=True)
         
-        # Preprocess the image
-        processed_image = preprocess_image(image)
-        
-        # Predict
+        # Preprocess and predict
         try:
+            processed_image = preprocess_image(image)
             predictions = model.predict(processed_image)
+            
+            # Assuming 4 classes as mentioned in previous code
+            CLASS_LABELS = ["Pituitary", "No Tumor", "Meningioma", "Glioma"]
+            
+            # Display prediction probabilities
             st.write("Prediction Probabilities:")
-            st.write(predictions)
+            for label, prob in zip(CLASS_LABELS, predictions[0]):
+                st.write(f"{label}: {prob*100:.2f}%")
+            
+            # Predicted class
+            predicted_class_index = np.argmax(predictions)
+            st.write(f"\nPredicted Class: {CLASS_LABELS[predicted_class_index]}")
+        
         except Exception as pred_error:
             st.error(f"Prediction failed: {pred_error}")
 
